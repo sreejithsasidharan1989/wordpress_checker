@@ -176,7 +176,7 @@ do
 
 done < <(
     "$php" "$softaculous_cli" --list_ins --sid=26 |
-    grep -oP 'https?://\K[^/]+'
+    grep -oP 'https?://\K[^|]+'
 )
 
 ;;
