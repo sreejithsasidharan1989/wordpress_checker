@@ -1,0 +1,184 @@
+#!/bin/bash
+
+########################################
+# Detect Control Panel
+########################################
+
+if [ -d /usr/local/cpanel ]; then
+    php="/usr/local/cpanel/3rdparty/bin/php"
+    softaculous_cli="/usr/local/cpanel/whostmgr/docroot/cgi/softaculous/cli.php"
+    cms="cpanel"
+
+elif [ -d /home/interworx ]; then
+    php="/home/interworx/bin/php"
+    softaculous_cli="/usr/local/softaculous/cli.php"
+    cms="interworx"
+
+elif [ -d /usr/local/psa ]; then
+    php="/usr/local/softaculous/bin/php"
+    softaculous_cli="/usr/local/softaculous/cli.php"
+    cms="plesk"
+
+else
+    echo "Unsupported control panel."
+    exit 1
+fi
+
+
+case "$cms" in
+
+cpanel)
+
+while IFS= read -r site
+do
+    user=$(awk -F: -v s="$site" '$1==s {gsub(/ /,"",$2); print $2}' /etc/trueuserdomains)
+
+    if [ -z "$user" ]; then
+        echo "Unable to determine user for $site"
+        continue
+    fi
+
+    home="/home/$user"
+
+    path=$(awk -F'==' -v s="$site" '$1==s {print $5}' /etc/userdatadomains)
+
+    if [ ! -d "$path" ]; then
+        echo "Document root not found for $site"
+        continue
+    fi
+
+    if [ ! -f "$path/wp-config.php" ]; then
+        echo "$site is not a valid WordPress installation."
+        continue
+    fi
+
+    wp="/opt/cpanel/ea-php81/root/usr/bin/php /usr/local/bin/wp"
+
+    echo
+    printf '\n=============================================================\n'
+    printf 'Website : %s\n' "$site"
+    printf 'User    : %s\n' "$user"
+    printf 'Path    : %s\n' "$path"
+    printf '=============================================================\n\n'
+
+    #######################################################
+    # Active Processes
+    #######################################################
+
+    printf '\033[1mActive Processes:\033[0m\n'
+
+    process=$(ps -u "$user" -U "$user" uf | sed '1d')
+
+    if [ -z "$process" ]; then
+        echo "No Active Processes Found"
+    else
+        echo "$process"
+    fi
+
+    #######################################################
+    # Cron Jobs
+    #######################################################
+
+    printf '\n\033[1mCron Jobs:\033[0m\n'
+    crontab -l -u "$user" 2>/dev/null || echo "No cron jobs found."
+
+    #######################################################
+    # SSH Keys
+    #######################################################
+
+    printf '\n\033[1mSSH Keys:\033[0m\n'
+
+    if [ -f "$home/.ssh/authorized_keys" ]; then
+        keys=$(grep -cv '^$' "$home/.ssh/authorized_keys")
+
+        if [ "$keys" -gt 0 ]; then
+            echo "Found $keys SSH key(s)"
+        else
+            echo "authorized_keys exists but is empty."
+        fi
+    else
+        echo "authorized_keys not found."
+    fi
+
+    #######################################################
+    # Hidden Directories
+    #######################################################
+
+    printf '\n\033[1mSuspicious Directories:\033[0m\n'
+
+    [ -d "$home/.local" ] && ls -ld "$home/.local"
+    [ -d "$home/.config" ] && ls -ld "$home/.config"
+
+    #######################################################
+    # WordPress Checks
+    #######################################################
+
+    sudo -u "$user" bash -c "
+
+        echo
+        printf '\033[1mWordPress URL:\033[0m\n'
+        $wp option get home --path=\"$path\" --skip-plugins --skip-themes 2>/dev/null
+
+        ########################################
+        # Core Checks
+        ########################################
+
+        core=\$($wp core verify-checksums --path=\"$path\" --skip-plugins --skip-themes 2>&1)
+
+        printf '\n\033[1mFiles Failed Checksum Verification:\033[0m\n'
+        echo \"\$core\" | awk '/doesn.t verify against checksum/ {print \$7}'
+
+        printf '\n\033[1mUnexpected Files:\033[0m\n'
+        echo \"\$core\" | awk '/should not exist/ {print \$6}'
+
+        ########################################
+        # Plugin Checks
+        ########################################
+
+        plugin=\$($wp plugin verify-checksums --path=\"$path\" --all 2>&1)
+
+        printf '\n\033[1mPlugins Failed Checksum Verification:\033[0m\n'
+        echo \"\$plugin\" | awk -F',' 'NR>1 {print \$1}'
+
+        printf '\n\033[1mPlugins That Could Not Be Verified:\033[0m\n'
+        echo \"\$plugin\" | awk -F'plugin |,' '/Could not retrieve the checksums/ {print \$2}'
+
+        ########################################
+        # Updates
+        ########################################
+
+        printf '\n\033[1mOutdated Plugins:\033[0m\n'
+        $wp plugin list \
+            --update=available \
+            --path=\"$path\" \
+            --skip-plugins \
+            --skip-themes
+
+        printf '\n\033[1mOutdated Themes:\033[0m\n'
+        $wp theme list \
+            --update=available \
+            --path=\"$path\" \
+            --skip-plugins \
+            --skip-themes
+
+        ########################################
+        # Admin Users
+        ########################################
+
+        printf '\n\033[1mAdministrator Accounts:\033[0m\n'
+        $wp user list \
+            --role=administrator \
+            --path=\"$path\" \
+            --skip-plugins \
+            --skip-themes
+
+    "
+
+done < <(
+    "$php" "$softaculous_cli" --list_ins --sid=26 |
+    grep -oP 'https?://\K[^/]+'
+)
+
+;;
+
+esac
