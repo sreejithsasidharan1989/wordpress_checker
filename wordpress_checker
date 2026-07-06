@@ -31,7 +31,9 @@ cpanel)
 
 while IFS= read -r site
 do
-    user=$(awk -F: -v s="$site" '$1==s {gsub(/ /,"",$2); print $2}' /etc/trueuserdomains)
+    site=${site//[[:space:]]/}
+    #user=$(awk -F: -v s="$site" '$1==s {gsub(/ /," ",$2); print $2}' /etc/trueuserdomains)
+    user=$(grep "$site" /etc/trueuserdomains | awk '{print $2}')
 
     if [ -z "$user" ]; then
         echo "Unable to determine user for $site"
@@ -40,7 +42,8 @@ do
 
     home="/home/$user"
 
-    path=$(awk -F'==' -v s="$site" '$1==s {print $5}' /etc/userdatadomains)
+    #path=$(awk -F'==' -v s="$site" '$1==s {print $5}' /etc/userdatadomains)
+    path=$(grep $site /etc/userdatadomains | awk -F'==' '{print $5}')
 
     if [ ! -d "$path" ]; then
         echo "Document root not found for $site"
@@ -52,7 +55,7 @@ do
         continue
     fi
 
-    wp="/opt/cpanel/ea-php81/root/usr/bin/php /usr/local/bin/wp"
+    wp="/opt/cpanel/ea-php81/root/usr/bin/php -dmemory_limit=-1 /usr/local/bin/wp"
 
     echo
     printf '\n=============================================================\n'
@@ -135,13 +138,11 @@ do
         # Plugin Checks
         ########################################
 
-        plugin=\$($wp plugin verify-checksums --path=\"$path\" --all 2>&1)
-
         printf '\n\033[1mPlugins Failed Checksum Verification:\033[0m\n'
-        echo \"\$plugin\" | awk -F',' 'NR>1 {print \$1}'
+        $wp plugin verify-checksums --all --skip-plugins --skip-themes --path=\"$path\" 2> /dev/null
 
         printf '\n\033[1mPlugins That Could Not Be Verified:\033[0m\n'
-        echo \"\$plugin\" | awk -F'plugin |,' '/Could not retrieve the checksums/ {print \$2}'
+        $wp plugin verify-checksums --all --skip-plugins --skip-themes --path=\"$path\" 2>&1 | grep 'Could not retrieve the checksums' | awk '{print \$12}' | tr -d ',' 
 
         ########################################
         # Updates
