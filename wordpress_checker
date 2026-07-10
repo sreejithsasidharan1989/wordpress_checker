@@ -109,8 +109,8 @@ do
 
     printf '\n\033[1mSuspicious Directories:\033[0m\n'
 
-    [ -d "$home/.local" ] && ls -ld "$home/.local"
-    [ -d "$home/.config" ] && ls -ld "$home/.config"
+    [ -d "$home/.local" ] && ls -l "$home/.local"
+    [ -d "$home/.config" ] && ls -l "$home/.config"
 
     #######################################################
     # WordPress Checks
@@ -170,6 +170,16 @@ do
         $wp user list \
             --role=administrator \
             --path=\"$path\" \
+            --skip-plugins \
+            --skip-themes
+
+        ########################################
+        # Shuffle Salts
+        ######################################## 
+
+	    printf '\n\033[1mResetting WordPress Salts:\033[0m\n'
+	    $wp config shuffle-salts \
+	        --path=\"$path\" \
             --skip-plugins \
             --skip-themes
 
