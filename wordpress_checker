@@ -1,5 +1,13 @@
 #!/bin/bash
 
+if [ -t 1 ]; then
+    BOLD="\033[1m"
+    RESET="\033[0m"
+else
+    BOLD=""
+    RESET=""
+fi
+
 ########################################
 # Detect Control Panel
 ########################################
@@ -68,7 +76,7 @@ do
     # Active Processes
     #######################################################
 
-    printf '\033[1mActive Processes:\033[0m\n'
+    printf '\n${BOLD}Active Processes:${RESET}:\n'
 
     process=$(ps -u "$user" -U "$user" uf | sed '1d')
 
@@ -82,14 +90,14 @@ do
     # Cron Jobs
     #######################################################
 
-    printf '\n\033[1mCron Jobs:\033[0m\n'
+    printf '\n${BOLD}Cron Jobs:${RESET}\n'
     crontab -l -u "$user" 2>/dev/null || echo "No cron jobs found."
 
     #######################################################
     # SSH Keys
     #######################################################
 
-    printf '\n\033[1mSSH Keys:\033[0m\n'
+    printf '\n${BOLD}SSH Keys:${RESET}\n'
 
     if [ -f "$home/.ssh/authorized_keys" ]; then
         keys=$(grep -cv '^$' "$home/.ssh/authorized_keys")
@@ -107,7 +115,7 @@ do
     # Hidden Directories
     #######################################################
 
-    printf '\n\033[1mSuspicious Directories:\033[0m\n'
+    printf '\n${BOLD}Suspicious Directories:${RESET}\n'
 
     [ -d "$home/.local" ] && ls -l "$home/.local"
     [ -d "$home/.config" ] && ls -l "$home/.config"
@@ -119,7 +127,7 @@ do
     sudo -u "$user" bash -c "
 
         echo
-        printf '\033[1mWordPress URL:\033[0m\n'
+        printf '\n${BOLD}WordPress URL:${RESET}\n'
         $wp option get home --path=\"$path\" --skip-plugins --skip-themes 2>/dev/null
 
         ########################################
@@ -128,34 +136,34 @@ do
 
         core=\$($wp core verify-checksums --path=\"$path\" --skip-plugins --skip-themes 2>&1)
 
-        printf '\n\033[1mFiles Failed Checksum Verification:\033[0m\n'
+        printf '\n${BOLD}Files Failed Checksum Verification:${RESET}\n'
         echo \"\$core\" | awk '/doesn.t verify against checksum/ {print \$7}'
 
-        printf '\n\033[1mUnexpected Files:\033[0m\n'
+        printf '\n${BOLD}Unexpected Files:${RESET}\n'
         echo \"\$core\" | awk '/should not exist/ {print \$6}'
 
         ########################################
         # Plugin Checks
         ########################################
 
-        printf '\n\033[1mPlugins Failed Checksum Verification:\033[0m\n'
+        printf '\n${BOLD}Plugins Failed Checksum Verification:${RESET}\n'
         $wp plugin verify-checksums --all --skip-plugins --skip-themes --path=\"$path\" 2> /dev/null
 
-        printf '\n\033[1mPlugins That Could Not Be Verified:\033[0m\n'
+        printf '\n${BOLD}Plugins That Could Not Be Verified:${RESET}\n'
         $wp plugin verify-checksums --all --skip-plugins --skip-themes --path=\"$path\" 2>&1 | grep 'Could not retrieve the checksums' | awk '{print \$12}' | tr -d ',' 
 
         ########################################
         # Updates
         ########################################
 
-        printf '\n\033[1mOutdated Plugins:\033[0m\n'
+        printf '\n${BOLD}Outdated Plugins:${RESET}\n'
         $wp plugin list \
             --update=available \
             --path=\"$path\" \
             --skip-plugins \
             --skip-themes
 
-        printf '\n\033[1mOutdated Themes:\033[0m\n'
+        printf '\n${BOLD}Outdated Themes:${RESET}\n'
         $wp theme list \
             --update=available \
             --path=\"$path\" \
@@ -166,7 +174,7 @@ do
         # Admin Users
         ########################################
 
-        printf '\n\033[1mAdministrator Accounts:\033[0m\n'
+        printf '\n${BOLD}[1mAdministrator Accounts:${RESET}\n'
         $wp user list \
             --role=administrator \
             --path=\"$path\" \
@@ -177,7 +185,7 @@ do
         # Shuffle Salts
         ######################################## 
 
-	    printf '\n\033[1mResetting WordPress Salts:\033[0m\n'
+	    printf '\n${BOLD}Resetting WordPress Salts:${RESET}\n'
 	    $wp config shuffle-salts \
 	        --path=\"$path\" \
             --skip-plugins \
