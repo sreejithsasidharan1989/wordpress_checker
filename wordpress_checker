@@ -134,10 +134,23 @@ do
         # Core Checks
         ########################################
 
+		printf '\n${BOLD}Checking WordPress Version${RESET}\n'
+
+		version_check=$($wp core check-update --format=count 2>/dev/null)
+
+		if [[ "$version_check" -eq 0 ]]; then
+				printf '\nWordPress core is at the latest version\n'
+		else
+    			printf '\nWordPress core update available\n'
+		fi
+
         core=\$($wp core verify-checksums --path=\"$path\" --skip-plugins --skip-themes 2>&1)
 
         printf '\n${BOLD}Files Failed Checksum Verification:${RESET}\n'
-        echo \"\$core\" | awk '/doesn.t verify against checksum/ {print \$7}'
+		if echo "$core" | grep -q "^Success: WordPress installation verifies against checksums"; then
+			echo "No corrupted core files found."
+		else
+			echo \"\$core\" | awk '/doesn.t verify against checksum/ {print \$7}'
 
         printf '\n${BOLD}Unexpected Files:${RESET}\n'
         echo \"\$core\" | awk '/should not exist/ {print \$6}'
