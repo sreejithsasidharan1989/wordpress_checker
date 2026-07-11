@@ -8,6 +8,11 @@ else
     RESET=""
 fi
 
+if ! command -v jq >/dev/null 2>&1; then
+    printf '\njq is not installed. This script requires jq to process the plugin list.\n'
+    exit 1
+fi
+
 ########################################
 # Detect Control Panel
 ########################################
