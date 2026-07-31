@@ -192,7 +192,7 @@ do
 		    --skip-plugins \
 		    --skip-themes)
 	    for ID in \$ids; do
-		    printf '%s\n' \"\$ID\"
+		    #printf '%s\n' \"\$ID\"
     		    display_name=\$($wp user get \"\$ID\" \
     			    --field=display_name \
     			    --path=\"$path\" \
