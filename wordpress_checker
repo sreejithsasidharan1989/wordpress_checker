@@ -46,7 +46,8 @@ while IFS= read -r site
 do
     site=${site//[[:space:]]/}
     #user=$(awk -F: -v s="$site" '$1==s {gsub(/ /," ",$2); print $2}' /etc/trueuserdomains)
-    user=$(grep "$site" /etc/userdatadomains | awk -F '==' '{print $1}' | awk '{print $2}')
+    #user=$(grep "$site" /etc/userdatadomains | awk -F '==' '{print $1}' | awk '{print $2}')
+	user=$(grep 'user:' /var/cpanel/userdata/*/"$site" | awk '{print $2}')
 
     if [ -z "$user" ]; then
         echo "Unable to determine user for $site"
