@@ -56,7 +56,7 @@ do
     if [ "$user" == "doneversetrainin" ]; then
 	    home="/home/$user"
 	    #path=$(awk -F'==' -v s="$site" '$1==s {print $5}' /etc/userdatadomains)
-	    path=$(grep $site /etc/userdatadomains | awk -F'==' '{print $5}')
+	    path=$(grep -R "^documentroot:" /var/cpanel/userdata/*/$site | awk '{print $2}')
 	    if [ ! -d "$path" ]; then
 	    	    echo "Document root not found for $site"
 	    	    continue
