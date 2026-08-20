@@ -29,6 +29,8 @@ check_script_mode() {
                 ;;
             \?)
                 echo "Usage: $0 [-u username]"
+                echo "  -u username    Scan WordPress sites for a specific user only"
+                echo "  (no args)      Scan all WordPress sites across all users"
                 exit 1
                 ;;
             :)
@@ -78,6 +80,11 @@ find_wordpress_sites() {
     local user="$1"
     local home="/home/$user"
     
+    # Check if home directory exists and is accessible
+    if [ ! -d "$home" ]; then
+        return 0
+    fi
+    
     # Search for WordPress installations in common directories
     local search_dirs=(
         "$home/public_html"
@@ -87,7 +94,7 @@ find_wordpress_sites() {
     )
     
     for search_dir in "${search_dirs[@]}"; do
-        if [ ! -d "$search_dir" ]; then
+        if [ ! -d "$search_dir" ] || [ ! -r "$search_dir" ]; then
             continue
         fi
         
@@ -103,7 +110,28 @@ find_wordpress_sites() {
 
 get_home_from_user() {
     local user="$1"
-    getent passwd "$user" | awk -F: '{print $6}'
+    getent passwd "$user" 2>/dev/null | awk -F: '{print $6}'
+}
+
+get_all_system_users() {
+    # Get all users from /etc/passwd, excluding system users
+    cut -d: -f1 /etc/passwd 2>/dev/null | while read -r user; do
+        # Skip empty lines
+        [ -z "$user" ] && continue
+        
+        # Skip common system users
+        case "$user" in
+            root|bin|daemon|adm|lp|sync|shutdown|halt|mail|operator|games|ftp|nobody|systemd-*|dbus|mysql|postgres|apache|nginx|www-data|www|syslog)
+                continue
+                ;;
+            _*)
+                continue
+                ;;
+            *)
+                echo "$user"
+                ;;
+        esac
+    done
 }
 
 # ===== Site Information Functions =====
@@ -190,125 +218,6 @@ check_suspicious_directories() {
     [ -d "$home/.config" ] && ls -l "$home/.config/" 2>/dev/null
 }
 
-# ===== WordPress Check Functions =====
-check_wordpress_url() {
-    local path="$1"
-    local wp_cli="$2"
-    
-    printf '%sWordPress URL:%s\n' "$BOLD" "$RESET"
-    $wp_cli option get home --path="$path" --skip-plugins --skip-themes 2>/dev/null
-}
-
-check_wordpress_version() {
-    local path="$1"
-    local wp_cli="$2"
-    
-    printf '\n%sChecking WordPress Version%s\n' "$BOLD" "$RESET"
-    local version_check=$($wp_cli core check-update --format=count 2>/dev/null)
-    if [[ ${version_check:-0} -eq 0 ]]; then
-        printf '\nWordPress core is at the latest version\n'
-    else
-        printf '\nWordPress core update available\n'
-    fi
-}
-
-check_core_checksums() {
-    local path="$1"
-    local wp_cli="$2"
-    
-    local core=$($wp_cli core verify-checksums --path="$path" --skip-plugins --skip-themes 2>&1)
-    printf '\n%sFiles Failed Checksum Verification:%s\n' "$BOLD" "$RESET"
-    echo "$core" | awk '/doesn.t verify against checksum/ {print $7}' 2>/dev/null
-    printf '\n%sUnexpected Files:%s\n' "$BOLD" "$RESET"
-    echo "$core" | awk '/should not exist/ {print $6}' 2>/dev/null
-}
-
-check_plugin_checksums() {
-    local path="$1"
-    local wp_cli="$2"
-    
-    printf '\n%sPlugins Failed Checksum Verification:%s\n' "$BOLD" "$RESET"
-    $wp_cli plugin verify-checksums --all --format=json --skip-plugins --skip-themes --path="$path" 2>/dev/null | jq -r '.[].plugin_name' 2>/dev/null | uniq
-    
-    printf '\n%sPlugins That Could Not Be Verified:%s\n' "$BOLD" "$RESET"
-    $wp_cli plugin verify-checksums --all --skip-plugins --skip-themes --path="$path" 2>&1 | grep 'Could not retrieve the checksums' | awk '{print $12}' | tr -d ',' 2>/dev/null
-}
-
-check_outdated_plugins() {
-    local path="$1"
-    local wp_cli="$2"
-    
-    printf '\n%sOutdated Plugins:%s\n' "$BOLD" "$RESET"
-    $wp_cli plugin list 2>/dev/null \
-        --update=available \
-        --path="$path" \
-        --skip-plugins \
-        --skip-themes
-}
-
-check_outdated_themes() {
-    local path="$1"
-    local wp_cli="$2"
-    
-    printf '\n%sOutdated Themes:%s\n' "$BOLD" "$RESET"
-    $wp_cli theme list 2>/dev/null \
-        --update=available \
-        --path="$path" \
-        --skip-plugins \
-        --skip-themes
-}
-
-list_admin_users() {
-    local path="$1"
-    local wp_cli="$2"
-    
-    printf '\n%sAdministrator Accounts:%s\n' "$BOLD" "$RESET"
-    $wp_cli user list 2>/dev/null \
-        --role=administrator \
-        --path="$path" \
-        --skip-plugins \
-        --skip-themes
-}
-
-check_admin_sessions() {
-    local path="$1"
-    local wp_cli="$2"
-    
-    printf '\n%sActive Admin Sessions:%s\n' "$BOLD" "$RESET"
-    local ids=$($wp_cli user list \
-        --role=administrator \
-        --field=ID \
-        --path="$path" \
-        --skip-plugins \
-        --skip-themes 2>/dev/null)
-    
-    for ID in $ids; do
-        local display_name=$($wp_cli user get "$ID" \
-            --field=display_name \
-            --path="$path" \
-            --skip-plugins \
-            --skip-themes 2>/dev/null)
-        
-        printf '\n%sExisting sessions for administrator User:(%s)%s\n' "$BOLD" "$display_name" "$RESET"
-        $wp_cli user session list "$ID" \
-            --path="$path" \
-            --skip-plugins \
-            --skip-themes \
-            --fields=login_time,ip 2>/dev/null
-    done
-}
-
-reset_wordpress_salts() {
-    local path="$1"
-    local wp_cli="$2"
-    
-    printf '\n%sResetting WordPress Salts:%s\n' "$BOLD" "$RESET"
-    $wp_cli config shuffle-salts \
-        --path="$path" \
-        --skip-plugins \
-        --skip-themes 2>/dev/null
-}
-
 # ===== Main WordPress Check Function =====
 perform_wordpress_checks() {
     local site_path="$1"
@@ -376,50 +285,61 @@ perform_wordpress_checks() {
 handle_cpanel_sites() {
     local wp_cli=$(get_cpanel_wp_cli)
     
-    # Get all cPanel users
-    local users=$(cut -d: -f2 /etc/trueuserdomains)
-    
-    for user in $users; do
-        # Respect -u filter
-        if [ -n "$TARGET_USER" ] && [ "$user" != "$TARGET_USER" ]; then
-            continue
+    if [ -n "$TARGET_USER" ]; then
+        # Scan only specified user
+        if ! id "$TARGET_USER" >/dev/null 2>&1; then
+            echo "Error: User $TARGET_USER does not exist"
+            exit 1
         fi
         
-        # Find WordPress installations for this user
-        find_wordpress_sites "$user" | while read -r site_path; do
-            perform_wordpress_checks "$site_path" "$user" "$wp_cli"
+        find_wordpress_sites "$TARGET_USER" | while read -r site_path; do
+            perform_wordpress_checks "$site_path" "$TARGET_USER" "$wp_cli"
         done
-    done
+    else
+        # Scan all cPanel users
+        get_all_system_users | while read -r user; do
+            find_wordpress_sites "$user" | while read -r site_path; do
+                perform_wordpress_checks "$site_path" "$user" "$wp_cli"
+            done
+        done
+    fi
 }
 
 handle_plesk_sites() {
     local wp_cli=$(get_plesk_wp_cli)
     
-    while IFS= read -r site; do
-        [ -z "$site" ] && continue
-        
-        local initial_data=$(get_site_info_plesk "$site")
-        local user=$(echo "$initial_data" | awk '{print $2}')
-        
-        if [ -z "$user" ]; then
-            echo "Unable to determine user for $site"
-            continue
+    if [ -n "$TARGET_USER" ]; then
+        # Scan only specified user
+        if ! id "$TARGET_USER" >/dev/null 2>&1; then
+            echo "Error: User $TARGET_USER does not exist"
+            exit 1
         fi
         
-        # Respect -u filter
-        if [ -n "$TARGET_USER" ] && [ "$user" != "$TARGET_USER" ]; then
-            continue
-        fi
-        
-        local path=$(echo "$initial_data" | awk '{print $3}')
-        
-        if ! is_valid_wordpress_install "$path"; then
-            continue
-        fi
-        
-        perform_wordpress_checks "$path" "$user" "$wp_cli"
-        
-    done < <(plesk bin site -l 2>/dev/null)
+        find_wordpress_sites "$TARGET_USER" | while read -r site_path; do
+            perform_wordpress_checks "$site_path" "$TARGET_USER" "$wp_cli"
+        done
+    else
+        # Scan all Plesk sites
+        while IFS= read -r site; do
+            [ -z "$site" ] && continue
+            
+            local initial_data=$(get_site_info_plesk "$site")
+            local user=$(echo "$initial_data" | awk '{print $2}')
+            
+            if [ -z "$user" ]; then
+                continue
+            fi
+            
+            local path=$(echo "$initial_data" | awk '{print $3}')
+            
+            if ! is_valid_wordpress_install "$path"; then
+                continue
+            fi
+            
+            perform_wordpress_checks "$path" "$user" "$wp_cli"
+            
+        done < <(plesk bin site -l 2>/dev/null)
+    fi
 }
 
 handle_generic_scan() {
@@ -440,8 +360,8 @@ handle_generic_scan() {
             ;;
     esac
     
-    # If -u is specified, scan only that user
     if [ -n "$TARGET_USER" ]; then
+        # Scan only specified user
         if ! id "$TARGET_USER" >/dev/null 2>&1; then
             echo "Error: User $TARGET_USER does not exist"
             exit 1
@@ -451,16 +371,9 @@ handle_generic_scan() {
             perform_wordpress_checks "$site_path" "$TARGET_USER" "$wp_cli"
         done
     else
-        # Scan all users
-        local users=$(cut -d: -f1 /etc/passwd | grep -v '^root$' | grep -v '^_' | grep -v '^nobody$')
-        
-        for user in $users; do
-            # Skip system users
-            if [ "$user" = "mysql" ] || [ "$user" = "postgres" ] || [ "$user" = "apache" ] || [ "$user" = "nginx" ]; then
-                continue
-            fi
-            
-            find_wordpress_sites "$user" 2>/dev/null | while read -r site_path; do
+        # Scan all users on the system
+        get_all_system_users | while read -r user; do
+            find_wordpress_sites "$user" | while read -r site_path; do
                 perform_wordpress_checks "$site_path" "$user" "$wp_cli"
             done
         done
