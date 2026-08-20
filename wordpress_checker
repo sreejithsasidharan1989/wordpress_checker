@@ -377,16 +377,11 @@ handle_cpanel_sites() {
     local wp_cli=$(get_cpanel_wp_cli)
     
     # Get all cPanel users
-    local users=$(cut -d: -f1 /etc/passwd | grep -v '^root$' | grep -v '^_' | grep -v '^nobody$')
+    local users=$(cut -d: -f2 /etc/trueuserdomains)
     
     for user in $users; do
         # Respect -u filter
         if [ -n "$TARGET_USER" ] && [ "$user" != "$TARGET_USER" ]; then
-            continue
-        fi
-        
-        # Skip system users
-        if [ "$user" = "mysql" ] || [ "$user" = "postgres" ] || [ "$user" = "apache" ] || [ "$user" = "nginx" ]; then
             continue
         fi
         
