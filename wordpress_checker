@@ -113,9 +113,9 @@ get_home_from_user() {
     getent passwd "$user" 2>/dev/null | awk -F: '{print $6}'
 }
 
-get_all_system_users() {
-    # Get all users from /etc/passwd, excluding system users
-    cut -d: -f1 /etc/passwd 2>/dev/null | while read -r user; do
+get_all_cPanel_users() {
+    # Get all users from /etc/trueuserdomains
+    cut -d: -f1 /etc/trueuserdomains 2>/dev/null | while read -r user; do
         # Skip empty lines
         [ -z "$user" ] && continue
         
@@ -297,7 +297,7 @@ handle_cpanel_sites() {
         done
     else
         # Scan all cPanel users
-        get_all_system_users | while read -r user; do
+        get_all_cPanel_users | while read -r user; do
             find_wordpress_sites "$user" | while read -r site_path; do
                 perform_wordpress_checks "$site_path" "$user" "$wp_cli"
             done
