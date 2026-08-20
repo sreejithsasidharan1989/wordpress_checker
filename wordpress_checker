@@ -99,7 +99,7 @@ find_wordpress_sites() {
         fi
         
         # Look for wp-config.php in this directory and subdirectories (max depth 2)
-        find "$search_dir" -maxdepth 2 -type f -name "wp-config.php" 2>/dev/null | while read -r wp_config; do
+        find "$search_dir" -maxdepth 4 -type f -name "wp-config.php" 2>/dev/null | while read -r wp_config; do
             local path=$(dirname "$wp_config")
             if is_valid_wordpress_install "$path"; then
                 echo "$path"
